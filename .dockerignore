@@ -1,0 +1,13 @@
+.git/
+.env
+.env.*
+venv/
+.venv/
+__pycache__/
+*.pyc
+models/*.gguf
+server/logs/
+results/*.json
+.vscode/
+test.html
+client/web/
