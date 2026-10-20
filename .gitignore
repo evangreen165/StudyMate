@@ -7,3 +7,4 @@ chroma_db/
 .streamlit/secrets.toml
 models/*.gguf
 models/.cache/
+results/*.json
