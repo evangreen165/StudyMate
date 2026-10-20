@@ -92,6 +92,6 @@ def get_llm(
         api_key=api_key,
         base_url=defaults["base_url"],
         temperature=0,
-        max_tokens=200,
+        max_tokens=512,
         default_headers=headers,
     )
