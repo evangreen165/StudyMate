@@ -108,3 +108,49 @@ python src/evaluate_baselines.py
 ## Качество и ограничения
 
 Целевые метрики и их обоснование — в `data/requirements.md`. Faithfulness на тестовой выборке — 0.41 (local 0.408, OpenRouter 0.422) при цели ≥ 0.40. Локальный судья Qwen2.5-1.5B склонен занижать faithfulness, а context recall считается по ключевым словам, поэтому метрики ориентировочные.
+## Развёртывание
+
+### Быстрый старт (Docker, одна команда)
+
+1. Скопируй `.env.example` в `.env` и заполни хотя бы один ключ:
+
+   ```bash
+   cp .env.example .env
+   # OPENROUTER_API_KEY=sk-or-... (бесплатный tier, 50 запросов/день)
+   ```
+
+2. Скачай локальную модель (если планируешь провайдер local):
+
+   ```bash
+   huggingface-cli download bartowski/Qwen2.5-1.5B-Instruct-GGUF Qwen2.5-1.5B-Instruct-Q4_K_M.gguf --local-dir models/
+   ```
+
+3. Запусти:
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+4. Открой:
+
+   - Streamlit UI: http://localhost:8501
+   - FastAPI Swagger: http://localhost:8000/docs
+   - Health check: http://localhost:8000/health
+
+5. Логи: `docker compose logs -f`.
+
+### Локальный запуск (без Docker)
+
+```bash
+python -m uvicorn server.main:app --port 8000
+streamlit run client/app.py --server.port 8501
+```
+
+## Архитектура контейнера
+
+- Один образ `rag-course-assistant:latest`.
+- `chroma_db/` и эмбеддер `intfloat/multilingual-e5-small` — в образе (build-time).
+- `models/*.gguf` — volume `./models:/app/models:ro` (не в образе).
+- `server/logs/` — volume, логи сохраняются на хосте.
+- `.env` — `env_file`, никогда не попадает в образ.
+- Entrypoint запускает uvicorn (8000) и streamlit (8501) параллельно.
