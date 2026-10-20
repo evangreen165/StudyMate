@@ -5,3 +5,5 @@ __pycache__/
 chroma_db/
 *.pyc
 .streamlit/secrets.toml
+models/*.gguf
+models/.cache/

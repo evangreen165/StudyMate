@@ -2,9 +2,9 @@ langchain
 langchain-community
 langchain-chroma
 chromadb
-langchain-openai
-openai
 sentence-transformers
+llama-cpp-python
+huggingface-hub
 pypdf
 cryptography
 fastapi
