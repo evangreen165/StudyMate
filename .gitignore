@@ -8,3 +8,4 @@ chroma_db/
 models/*.gguf
 models/.cache/
 results/*.json
+server/logs/

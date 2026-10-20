@@ -59,6 +59,27 @@ python src/ingest.py --rebuild
 
 Скрипт нарезает PDF на чанки по 800 символов с перекрытием 100, строит коллекцию `course_materials` в `chroma_db/` и сохраняет метаданные `source` и `page`. Эмбеддинги считаются локально моделью `intfloat/multilingual-e5-small` (384 измерения).
 
+## Запуск API и UI
+
+```bash
+uvicorn server.main:app --reload
+streamlit run client/app.py
+```
+
+По умолчанию клиент обращается к `http://127.0.0.1:8000`; адрес можно изменить переменной `API_URL`.
+
+Проверка API:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/providers
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"question\": \"Что такое рекурсия?\", \"provider\": \"openrouter\"}"
+```
+
+Логи запросов пишутся в `server/logs/app.log` (не коммитится).
+
 ## Проверка провайдеров
 
 ```bash
