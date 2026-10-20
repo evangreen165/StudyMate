@@ -5,6 +5,7 @@ chromadb
 sentence-transformers
 llama-cpp-python
 huggingface-hub
+rank-bm25
 pypdf
 cryptography
 fastapi

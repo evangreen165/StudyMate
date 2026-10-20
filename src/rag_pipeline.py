@@ -10,8 +10,8 @@ COLLECTION_NAME = "course_materials"
 EMBEDDER_NAME = "intfloat/multilingual-e5-small"
 MODEL_PATH = "models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"
 TOP_K = 4
-N_THREADS = 8
-N_CTX = 8192
+N_THREADS = 6
+N_CTX = 4096
 
 vectorstore = Chroma(
     persist_directory=PERSIST_DIR,
@@ -26,6 +26,8 @@ llm = ChatLlamaCpp(
     n_ctx=N_CTX,
     n_threads=N_THREADS,
     n_gpu_layers=0,
+    max_tokens=512,
+    stop=["<|im_end|>"],
     verbose=False,
 )
 

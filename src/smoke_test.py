@@ -4,7 +4,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from baselines import baseline_pure_llm, baseline_tfidf
+from baselines import (
+    baseline_bm25,
+    baseline_pure_llm,
+    baseline_vector_search,
+)
 from rag_pipeline import answer_question
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,7 +33,8 @@ QUESTIONS = [
 SYSTEMS = [
     ("RAG", answer_question),
     ("Pure LLM", baseline_pure_llm),
-    ("TF-IDF/Chroma", baseline_tfidf),
+    ("Vector search (Chroma)", baseline_vector_search),
+    ("BM25", baseline_bm25),
 ]
 
 
@@ -98,7 +103,8 @@ def build_report(rows: list[dict]) -> str:
         "- LLM: `models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf`",
         "- Эмбеддер: `intfloat/multilingual-e5-small` (384 измерения)",
         "- Векторная БД: Chroma, коллекция `course_materials`",
-        "- RAG: `TOP_K=4`, `N_CTX=8192`, `N_THREADS=8`",
+        "- RAG: `TOP_K=4`, `N_CTX=4096`, `N_THREADS=6`, `max_tokens=512`",
+        "- BM25: `rank-bm25`, лексический поиск top-1 по всем чанкам",
         "",
         "## Сводная таблица",
         "",
@@ -174,3 +180,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# MARKER_CHECK
