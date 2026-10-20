@@ -8,21 +8,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from .logging_config import setup_logging
 from src.config import PROVIDER_DEFAULTS, get_provider
 from src.rag_pipeline import answer_question
 
-app = FastAPI(title="StudyMate RAG API")
-
-LOG_DIR = Path(__file__).resolve().parent / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+setup_logging()
 logger = logging.getLogger("studymate.api")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.FileHandler(LOG_DIR / "app.log", encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    )
-    logger.addHandler(handler)
+
+app = FastAPI(title="StudyMate RAG API")
 
 
 class QuestionRequest(BaseModel):
@@ -74,6 +67,16 @@ def chat(request: QuestionRequest) -> AnswerResponse:
         )
 
     provider = (request.provider or get_provider()).lower()
+    logger.info(
+        "chat_request",
+        extra={
+            "provider": provider,
+            "model": request.model or "",
+            "question_len": len(question),
+            "question_preview": question[:200],
+        },
+    )
+
     if provider not in PROVIDER_DEFAULTS:
         available = ", ".join(PROVIDER_DEFAULTS)
         raise HTTPException(
@@ -103,19 +106,27 @@ def chat(request: QuestionRequest) -> AnswerResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        logger.exception("Ошибка провайдера %s", provider)
+        logger.exception(
+            "chat_error",
+            extra={
+                "provider": provider,
+                "error_type": type(exc).__name__,
+            },
+        )
         raise HTTPException(
             status_code=502, detail=f"Ошибка провайдера: {exc}"
         )
 
-    elapsed = time.perf_counter() - started
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info(
-        "provider=%s model=%s question=%r elapsed=%.2fs sources=%d",
-        result["provider"],
-        result["model"],
-        question[:200],
-        elapsed,
-        len(result["sources"]),
+        "chat_response",
+        extra={
+            "provider": result["provider"],
+            "model": result["model"],
+            "elapsed_ms": elapsed_ms,
+            "sources_count": len(result["sources"]),
+            "answer_len": len(result["answer"]),
+        },
     )
     return AnswerResponse(
         answer=result["answer"],
