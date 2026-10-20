@@ -104,3 +104,7 @@ python src/evaluate_baselines.py
 ```
 
 Отчёты сохраняются в `results/eval_<split>_<provider>_judge<judge>.md`; промежуточные JSON не коммитятся. Судья local слабый, а context recall не учитывает синонимы и морфологию — метрики следует рассматривать как ориентировочные.
+
+## Качество и ограничения
+
+Целевые метрики и их обоснование — в `data/requirements.md`. Faithfulness на тестовой выборке — 0.41 (local 0.408, OpenRouter 0.422) при цели ≥ 0.40. Локальный судья Qwen2.5-1.5B склонен занижать faithfulness, а context recall считается по ключевым словам, поэтому метрики ориентировочные.
