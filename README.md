@@ -88,3 +88,19 @@ python src/smoke_test.py --provider openrouter
 ```
 
 Отчёты сохраняются в `results/smoke_test_<provider>_<model>.md`; сводное сравнение — в `results/smoke_test_comparison.md`.
+## Оценка качества
+
+RAGAS 0.4.3 не установился в этом окружении: зависимость `scikit-network` требует MSVC, а импорт несовместим с текущей `langchain-community`. Поэтому используется lightweight-эквивалент `src/evaluate_light.py`:
+
+- **Faithfulness** — локальный судья Qwen2.5-1.5B разбивает ответ на утверждения и проверяет их по контексту (0–1).
+- **Answer relevance** — тот же судья оценивает соответствие ответа вопросу по шкале 1–5.
+- **Context recall** — доля ключевых слов эталонного ответа, найденных в контексте (0–1).
+
+```bash
+python src/evaluate_light.py --split val --provider local --judge local
+python src/evaluate_light.py --split test --provider local --judge local
+python src/evaluate_light.py --split test --provider openrouter --judge local --limit 18
+python src/evaluate_baselines.py
+```
+
+Отчёты сохраняются в `results/eval_<split>_<provider>_judge<judge>.md`; промежуточные JSON не коммитятся. Судья local слабый, а context recall не учитывает синонимы и морфологию — метрики следует рассматривать как ориентировочные.
