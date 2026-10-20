@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  rag-assistant:
+    build: .
+    image: rag-course-assistant:latest
+    container_name: rag-course-assistant
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-local}
+      - LOCAL_MODEL_PATH=models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./models:/app/models:ro
+      - ./server/logs:/app/server/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes: {}
