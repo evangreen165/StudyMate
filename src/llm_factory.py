@@ -36,6 +36,8 @@ def resolve_model(
     name = resolve_provider(provider)
     defaults = PROVIDER_DEFAULTS[name]
     if name == "local":
+        if model_override and Path(model_override).exists():
+            return Path(model_override).name
         return Path(defaults["default_model"]).name
     return model_override or os.getenv("LLM_MODEL") or defaults["default_model"]
 
@@ -52,7 +54,11 @@ def get_llm(
     defaults = PROVIDER_DEFAULTS[name]
 
     if name == "local":
-        model_path = defaults["default_model"]
+        model_path = (
+            model_override
+            if model_override and Path(model_override).exists()
+            else defaults["default_model"]
+        )
         if not Path(model_path).exists():
             raise RuntimeError(
                 f"Файл модели не найден: {model_path}. "

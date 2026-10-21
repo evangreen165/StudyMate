@@ -20,6 +20,15 @@ def load_providers() -> list[dict]:
     return response.json()["providers"]
 
 
+@st.cache_data(ttl=300)
+def load_models(provider: str) -> list[dict]:
+    response = requests.get(
+        f"{API_URL}/models", params={"provider": provider}, timeout=20
+    )
+    response.raise_for_status()
+    return response.json().get("models", [])
+
+
 try:
     providers = load_providers()
 except Exception as exc:
@@ -45,14 +54,75 @@ provider = st.sidebar.radio(
     index=default_index,
     format_func=format_provider,
 )
-model_value = st.sidebar.text_input(
-    "Модель (опционально, для облачных)",
+
+models: list[dict] = []
+models_error = None
+try:
+    models = load_models(provider)
+except Exception as exc:
+    models_error = str(exc)
+
+free_only = st.sidebar.checkbox(
+    "Только бесплатные",
+    value=False,
     disabled=provider == "local",
 )
+if provider != "local" and free_only:
+    models = [item for item in models if item.get("is_free") is True]
 
-if provider == "local":
-    model_name = Path(by_name[provider]["default_model"]).name
-    st.sidebar.caption(f"Локальная модель: {model_name}")
+model_value = ""
+if models:
+    if provider == "local":
+        by_path = {item["path"]: item for item in models}
+        options = list(by_path)
+
+        def format_local(path: str) -> str:
+            item = by_path[path]
+            quant = item.get("quant") or "?"
+            return f"{item['name']} ({item['size_mb']} MB, {quant})"
+
+        selected = st.sidebar.selectbox(
+            "Модель", options, format_func=format_local
+        )
+        model_value = selected
+        st.sidebar.caption(f"Локальная модель: {by_path[selected]['name']}")
+    else:
+        by_id = {item["id"]: item for item in models}
+        options = list(by_id)
+
+        def format_cloud(model_id: str) -> str:
+            item = by_id[model_id]
+            context = item.get("context_length") or "?"
+            if item.get("is_free"):
+                return f"🟢 {model_id} (free, ctx={context})"
+            pricing = item.get("pricing") or {}
+            prompt = pricing.get("prompt_per_m")
+            if prompt is not None:
+                return f"{model_id} (ctx={context}, ${prompt:.2f}/M in)"
+            return f"{model_id} (ctx={context}, цена не указана)"
+
+        selected = st.sidebar.selectbox(
+            "Модель", options, format_func=format_cloud
+        )
+        model_value = selected
+else:
+    if models_error:
+        st.sidebar.warning(f"Не удалось загрузить каталог моделей: {models_error}")
+    elif provider != "local" and free_only:
+        st.sidebar.warning("Нет бесплатных моделей для выбранного провайдера")
+    else:
+        st.sidebar.warning("Каталог моделей пуст")
+    model_value = st.sidebar.text_input(
+        "Модель (введите вручную)",
+        value=by_name[provider]["default_model"],
+    )
+
+if provider == "local" and models:
+    pass
+elif provider == "local":
+    st.sidebar.caption(
+        f"Локальная модель: {Path(by_name[provider]['default_model']).name}"
+    )
 elif not by_name[provider]["configured"]:
     st.sidebar.warning("Провайдер не настроен: добавьте ключ в .env")
 
