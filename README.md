@@ -108,6 +108,27 @@ python src/evaluate_baselines.py
 ## Качество и ограничения
 
 Целевые метрики и их обоснование — в `data/requirements.md`. Faithfulness на тестовой выборке — 0.41 (local 0.408, OpenRouter 0.422) при цели ≥ 0.40. Локальный судья Qwen2.5-1.5B склонен занижать faithfulness, а context recall считается по ключевым словам, поэтому метрики ориентировочные.
+## Каталог моделей
+
+`GET /models?provider=<name>` возвращает нормализованный каталог:
+
+- `local` — файлы `models/*.gguf` с полями `id`, `name`, `path`, `size_mb`, `quant`, `is_free`.
+- `openrouter` — модели OpenRouter без ключа (поля `id`, `name`, `context_length`, `pricing`, `is_free`).
+- `openai`, `groq`, `deepseek` — требуют соответствующий ключ; цены в `/models` обычно отсутствуют, поэтому `pricing=None`, `is_free=None` (цена не указана).
+
+Ответ кешируется на 5 минут; каталог OpenRouter — на 1 час. В UI модели выбираются через selectbox, есть фильтр «Только бесплатные».
+
+## Управление датасетами
+
+- `GET /datasets` — список датасетов и агрегированный паспорт.
+- `GET /datasets/{id}/passport` — паспорт датасета.
+- `POST /datasets` — JSON `{"dataset_id", "name", "description", "source_dir"}`; `source_dir` — путь на сервере с PDF.
+- `DELETE /datasets/{id}?hard=false` — soft delete (архивирование), `hard=true` — удаление чанков и папки.
+
+Паспорта хранятся в `data/datasets/<id>/passport.json`, индекс — в `data/datasets/_index.json`. RAG-поиск фильтруется по `dataset_id`; при выборе «Все датасеты» архивные исключаются.
+
+Ограничение: загрузка PDF через браузер не поддерживается — пользователь кладёт файлы в папку на сервере (в Docker — в смонтированный `data/datasets`), затем регистрирует датасет по пути.
+
 ## Развёртывание
 
 ### Быстрый старт (Docker, одна команда)
@@ -156,6 +177,7 @@ streamlit run client/app.py --server.port 8501
 - `server/logs/` — volume, логи сохраняются на хосте.
 - `.env` — `env_file`, никогда не попадает в образ.
 - Entrypoint запускает uvicorn (8000) и streamlit (8501) параллельно.
+- `data/datasets/` — volume `./data/datasets:/app/data/datasets` (паспорта и новые датасеты переживают перезапуск).
 - Размер образа: 4.20 ГБ; запуск до healthy — 21.64 с.
 
 ## Производительность

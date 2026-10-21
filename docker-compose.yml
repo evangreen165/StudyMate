@@ -15,6 +15,7 @@ services:
     volumes:
       - ./models:/app/models:ro
       - ./server/logs:/app/server/logs
+      - ./data/datasets:/app/data/datasets
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
