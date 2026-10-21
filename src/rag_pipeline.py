@@ -129,4 +129,5 @@ def answer_question(
         "model": resolve_model(provider, model),
         "dataset_id": dataset_id,
         "usage": usage_payload,
+        "finish_reason": finish_reason,
     }

@@ -28,6 +28,8 @@ EXTRA_FIELDS = (
     "duration_s",
     "force",
     "max_tokens",
+    "finish_reason",
+    "usage",
 )
 
 

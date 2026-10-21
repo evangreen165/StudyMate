@@ -400,6 +400,8 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             "sources_count": len(result["sources"]),
             "answer_len": len(result["answer"]),
             "dataset_id": result.get("dataset_id") or "",
+            "finish_reason": result.get("finish_reason"),
+            "usage": result.get("usage"),
         },
     )
     return AnswerResponse(
