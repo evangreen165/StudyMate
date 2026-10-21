@@ -42,6 +42,7 @@ class QuestionRequest(BaseModel):
     provider: str | None = None
     model: str | None = None
     dataset_id: str | None = None
+    max_tokens: int | None = None
 
 
 class AnswerResponse(BaseModel):
@@ -338,6 +339,7 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             "question_len": len(question),
             "question_preview": question[:200],
             "dataset_id": request.dataset_id or "",
+            "max_tokens": request.max_tokens,
         },
     )
 
@@ -369,6 +371,7 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             provider=request.provider,
             model=request.model,
             dataset_id=request.dataset_id,
+            max_tokens=request.max_tokens,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

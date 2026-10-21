@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from functools import lru_cache
 
@@ -17,6 +18,8 @@ PERSIST_DIR = "chroma_db"
 COLLECTION_NAME = "course_materials"
 EMBEDDER_NAME = "intfloat/multilingual-e5-small"
 
+logger = logging.getLogger("studymate.api")
+
 TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 vectorstore = Chroma(
@@ -27,14 +30,28 @@ vectorstore = Chroma(
 
 
 def baseline_pure_llm(
-    question: str, provider: str | None = None, model: str | None = None
+    question: str,
+    provider: str | None = None,
+    model: str | None = None,
+    max_tokens: int | None = None,
 ) -> dict:
-    llm = get_llm(provider, model_override=model)
+    llm = get_llm(
+        provider, model_override=model, max_tokens_override=max_tokens
+    )
     messages = [
         SystemMessage(content="Ты — полезный ассистент"),
         HumanMessage(content=f"Ответь на вопрос студента: {question}"),
     ]
     response = llm.invoke(messages)
+    finish_reason = (response.response_metadata or {}).get("finish_reason")
+    if finish_reason == "length":
+        logger.warning(
+            "response_truncated",
+            extra={
+                "provider": resolve_provider(provider),
+                "max_tokens": max_tokens or None,
+            },
+        )
     return {
         "answer": response.content,
         "sources": [],

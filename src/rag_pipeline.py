@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
@@ -20,6 +22,8 @@ except ImportError:
 PERSIST_DIR = "chroma_db"
 COLLECTION_NAME = "course_materials"
 EMBEDDER_NAME = "intfloat/multilingual-e5-small"
+logger = logging.getLogger("studymate.api")
+
 TOP_K = 4
 
 vectorstore = Chroma(
@@ -33,7 +37,11 @@ PROMPT = ChatPromptTemplate.from_messages(
             "system",
             "Ты — ассистент по учебным материалам курса. Отвечай ТОЛЬКО на основе "
             "предоставленного контекста. Если в контексте нет ответа — скажи: "
-            '"В материалах курса это не освещено". Не придумывай информацию.',
+            '"В материалах курса это не освещено". Не придумывай информацию. '
+            "Отвечай развёрнуто и полно: 3–7 предложений или структурированный список, "
+            "если вопрос требует. Не обрывай ответ на середине. Если информации в "
+            "контексте недостаточно для полного ответа — скажи, что именно не освещено, "
+            "но не обрывай мысль.",
         ),
         (
             "human",
@@ -48,8 +56,11 @@ def answer_question(
     provider: str | None = None,
     model: str | None = None,
     dataset_id: str | None = None,
+    max_tokens: int | None = None,
 ) -> dict:
-    llm = get_llm(provider, model_override=model)
+    llm = get_llm(
+        provider, model_override=model, max_tokens_override=max_tokens
+    )
 
     if dataset_id:
         status = dataset_status(dataset_id)
@@ -71,6 +82,16 @@ def answer_question(
     context_text = "\n\n---\n\n".join(chunk.page_content for chunk in chunks)
     messages = PROMPT.format_messages(context=context_text, question=question)
     response = llm.invoke(messages)
+
+    finish_reason = (response.response_metadata or {}).get("finish_reason")
+    if finish_reason == "length":
+        logger.warning(
+            "response_truncated",
+            extra={
+                "provider": resolve_provider(provider),
+                "max_tokens": max_tokens or None,
+            },
+        )
 
     return {
         "answer": response.content,

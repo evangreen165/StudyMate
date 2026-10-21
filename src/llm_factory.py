@@ -44,7 +44,9 @@ def resolve_model(
 
 @lru_cache(maxsize=16)
 def get_llm(
-    provider: str | None = None, model_override: str | None = None
+    provider: str | None = None,
+    model_override: str | None = None,
+    max_tokens_override: int | None = None,
 ) -> BaseChatModel:
     name = resolve_provider(provider)
     if name not in PROVIDER_DEFAULTS:
@@ -66,13 +68,13 @@ def get_llm(
             )
         return ChatLlamaCpp(
             model_path=model_path,
-            n_ctx=4096,
+            n_ctx=6144,
             n_threads=_physical_cores(),
             n_batch=512,
             n_ubatch=128,
             n_gpu_layers=0,
             temperature=0,
-            max_tokens=200,
+            max_tokens=max_tokens_override or 1024,
             stop=["<|im_end|>"],
             verbose=False,
         )
@@ -98,6 +100,6 @@ def get_llm(
         api_key=api_key,
         base_url=defaults["base_url"],
         temperature=0,
-        max_tokens=512,
+        max_tokens=max_tokens_override or 2048,
         default_headers=headers,
     )

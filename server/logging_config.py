@@ -27,6 +27,7 @@ EXTRA_FIELDS = (
     "total_size",
     "duration_s",
     "force",
+    "max_tokens",
 )
 
 
