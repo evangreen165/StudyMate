@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -10,6 +11,41 @@ import streamlit as st
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
 MAX_TOTAL_MB = 500
+UI_STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "ui_state.json"
+
+
+def _load_ui_state() -> dict:
+    try:
+        if UI_STATE_PATH.exists():
+            return json.loads(UI_STATE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def persist_ui_state() -> None:
+    # Сохраняем настройки и чаты на диск, чтобы они переживали
+    # перезагрузку страницы (session_state сбрасывается).
+    try:
+        payload = {
+            "settings": {
+                "provider": st.session_state.get("provider"),
+                "model": st.session_state.get("model"),
+                "dataset_id": st.session_state.get("dataset_id"),
+                "max_tokens": st.session_state.get("max_tokens", 2048),
+                "dark_mode": st.session_state.get("dark_mode", False),
+                "free_only": st.session_state.get("free_only", False),
+            },
+            "chats": st.session_state.get("chats", []),
+            "current_chat_id": st.session_state.get("current_chat_id"),
+        }
+        UI_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        UI_STATE_PATH.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
 
 HOW_MARKDOWN = '''
 ## Что такое RAG
@@ -133,34 +169,41 @@ def load_datasets() -> dict:
     return response.json()
 
 
-# ── Сессионное состояние: токены, чаты, настройки (пункты 4 и 6) ──────────
-# Пункт 4: max_tokens хранится в session_state, виджет slider использует key="max_tokens",
-# поэтому значение переживает ререндеры Streamlit и не сбрасывается при взаимодействии.
-if "max_tokens" not in st.session_state:
-    st.session_state.max_tokens = 2048
+# ── Сессионное состояние + персистентность на диск ─────────────────────────
+_ui_state = _load_ui_state()
+_settings = _ui_state.get("settings", {})
 
+if "max_tokens" not in st.session_state:
+    st.session_state.max_tokens = _settings.get("max_tokens", 2048)
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "free_only" not in st.session_state:
-    st.session_state.free_only = False
+    st.session_state.free_only = _settings.get("free_only", False)
 if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
+    st.session_state.dark_mode = _settings.get("dark_mode", False)
 if "last_provider" not in st.session_state:
-    st.session_state.last_provider = None
+    st.session_state.last_provider = _settings.get("provider")
 if "provider" not in st.session_state:
-    st.session_state.provider = "local"
+    st.session_state.provider = _settings.get("provider", "local")
 if "model" not in st.session_state:
-    st.session_state.model = None
+    st.session_state.model = _settings.get("model")
 if "dataset_id" not in st.session_state:
-    st.session_state.dataset_id = "__all__"
+    st.session_state.dataset_id = _settings.get("dataset_id", "__all__")
 
-# Пункт 6: история диалогов — список чатов в session_state.
+# Пункт 6: история диалогов (восстанавливается из файла при перезагрузке).
 if "chats" not in st.session_state:
-    st.session_state.chats = [
+    loaded_chats = _ui_state.get("chats") or []
+    st.session_state.chats = loaded_chats or [
         {"id": str(uuid.uuid4()), "title": "Новый чат", "messages": []}
     ]
 if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = st.session_state.chats[0]["id"]
+    candidate = _ui_state.get("current_chat_id")
+    st.session_state.current_chat_id = (
+        candidate
+        if candidate
+        and any(c["id"] == candidate for c in st.session_state.chats)
+        else st.session_state.chats[0]["id"]
+    )
 
 
 def current_chat() -> dict:
@@ -719,6 +762,9 @@ def help_dialog() -> None:
 def limits_dialog() -> None:
     st.markdown(LIMITS_MARKDOWN)
 
+
+# Сохраняем настройки и чаты на диск (переживает перезагрузку страницы).
+persist_ui_state()
 
 if st.session_state.get("show_manage_dialog"):
     st.session_state.show_manage_dialog = False
