@@ -1,0 +1,2 @@
+CONTAINER ID   NAME                   CPU %     MEM USAGE / LIMIT    MEM %     NET I/O           BLOCK I/O         PIDS
+f671a68049d1   rag-course-assistant   1.29%     1.92GiB / 7.698GiB   24.94%    2.26MB / 3.05MB   35.4MB / 65.2MB   66
