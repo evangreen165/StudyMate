@@ -13,6 +13,7 @@ services:
       - LOCAL_MODEL_PATH=models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
+      - ./chroma_db:/app/chroma_db
       - ./models:/app/models:ro
       - ./server/logs:/app/server/logs
       - ./data/datasets:/app/data/datasets

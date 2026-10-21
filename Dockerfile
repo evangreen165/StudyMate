@@ -19,17 +19,25 @@ RUN pip install --upgrade pip && \
 COPY src/ ./src/
 COPY server/ ./server/
 COPY client/ ./client/
-COPY data/ ./data/
-COPY chroma_db/ ./chroma_db/
+COPY .streamlit/ /app/.streamlit/
+COPY chroma_db/ /app/_seed/chroma_db/
+COPY data/datasets/ /app/_seed/datasets/
+COPY data/course_materials/ /app/data/course_materials/
+COPY data/test_set_full.jsonl data/val_set.jsonl data/test_set.jsonl data/requirements.md data/eda_questions.md /app/data/
 COPY README.md .
 
 RUN python -c "from langchain_community.embeddings import HuggingFaceEmbeddings; HuggingFaceEmbeddings(model_name='intfloat/multilingual-e5-small')" || true
 
-RUN mkdir -p server/logs models
+RUN mkdir -p /app/chroma_db /app/data/datasets /app/models /app/server/logs
+
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000 8501
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["sh", "-c", "python -m uvicorn server.main:app --host 0.0.0.0 --port 8000 & streamlit run client/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true & wait"]
