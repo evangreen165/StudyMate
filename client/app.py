@@ -29,6 +29,13 @@ def load_models(provider: str) -> list[dict]:
     return response.json().get("models", [])
 
 
+@st.cache_data(ttl=60)
+def load_datasets() -> list[dict]:
+    response = requests.get(f"{API_URL}/datasets", timeout=20)
+    response.raise_for_status()
+    return response.json().get("datasets", [])
+
+
 try:
     providers = load_providers()
 except Exception as exc:
@@ -126,6 +133,31 @@ elif provider == "local":
 elif not by_name[provider]["configured"]:
     st.sidebar.warning("Провайдер не настроен: добавьте ключ в .env")
 
+datasets: list[dict] = []
+try:
+    datasets = load_datasets()
+except Exception as exc:
+    st.sidebar.warning(f"Не удалось загрузить датасеты: {exc}")
+
+active_datasets = [item for item in datasets if item.get("status") == "active"]
+dataset_by_id = {item["id"]: item for item in active_datasets}
+dataset_options = ["__all__"] + list(dataset_by_id)
+
+
+def format_dataset(dataset_id: str) -> str:
+    if dataset_id == "__all__":
+        return "Все датасеты"
+    item = dataset_by_id.get(dataset_id, {})
+    chunks = item.get("chunks")
+    suffix = f", {chunks} чанков" if chunks is not None else ""
+    return f"{item.get('name', dataset_id)}{suffix}"
+
+
+selected_dataset = st.sidebar.selectbox(
+    "Датасет", dataset_options, format_func=format_dataset
+)
+dataset_id = None if selected_dataset == "__all__" else selected_dataset
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -162,6 +194,7 @@ if question:
             "question": question,
             "provider": provider,
             "model": model_value.strip() or None,
+            "dataset_id": dataset_id,
         }
 
         with st.chat_message("assistant"):

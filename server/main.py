@@ -33,6 +33,7 @@ class QuestionRequest(BaseModel):
     question: str = ""
     provider: str | None = None
     model: str | None = None
+    dataset_id: str | None = None
 
 
 class AnswerResponse(BaseModel):
@@ -40,6 +41,7 @@ class AnswerResponse(BaseModel):
     sources: list[dict]
     provider: str
     model: str
+    dataset_id: str | None = None
 
 
 class DatasetRequest(BaseModel):
@@ -205,6 +207,7 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             "model": request.model or "",
             "question_len": len(question),
             "question_preview": question[:200],
+            "dataset_id": request.dataset_id or "",
         },
     )
 
@@ -232,7 +235,10 @@ def chat(request: QuestionRequest) -> AnswerResponse:
     started = time.perf_counter()
     try:
         result = answer_question(
-            question, provider=request.provider, model=request.model
+            question,
+            provider=request.provider,
+            model=request.model,
+            dataset_id=request.dataset_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -257,6 +263,7 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             "elapsed_ms": elapsed_ms,
             "sources_count": len(result["sources"]),
             "answer_len": len(result["answer"]),
+            "dataset_id": result.get("dataset_id") or "",
         },
     )
     return AnswerResponse(
@@ -264,4 +271,5 @@ def chat(request: QuestionRequest) -> AnswerResponse:
         sources=result["sources"],
         provider=result["provider"],
         model=result["model"],
+        dataset_id=result.get("dataset_id"),
     )
