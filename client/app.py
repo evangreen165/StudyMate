@@ -573,6 +573,7 @@ if prompt:
                     prompt_tokens = usage.get("prompt_tokens")
                     completion_tokens = usage.get("completion_tokens")
                     total_tokens = usage.get("total_tokens")
+                    finish_reason = data.get("finish_reason")
                     parts = [f"⏱ Время: {elapsed:.1f} сек"]
                     if (
                         prompt_tokens is not None
@@ -583,6 +584,10 @@ if prompt:
                         c = completion_tokens if completion_tokens is not None else "?"
                         t = total_tokens if total_tokens is not None else "?"
                         parts.append(f"🔤 prompt {p} / completion {c} / total {t}")
+                    else:
+                        parts.append("🔤 токены недоступны (local)")
+                    if finish_reason:
+                        parts.append(f"⏹ {finish_reason}")
                     parts.append(f"📎 Источников: {len(sources)}")
                     meta = " | ".join(parts)
                     st.caption(meta)

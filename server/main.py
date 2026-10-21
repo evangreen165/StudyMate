@@ -53,6 +53,7 @@ class AnswerResponse(BaseModel):
     model: str
     dataset_id: str | None = None
     usage: dict | None = None
+    finish_reason: str | None = None
 
 
 class DatasetRequest(BaseModel):
@@ -411,4 +412,5 @@ def chat(request: QuestionRequest) -> AnswerResponse:
         model=result["model"],
         dataset_id=result.get("dataset_id"),
         usage=result.get("usage"),
+        finish_reason=result.get("finish_reason"),
     )
