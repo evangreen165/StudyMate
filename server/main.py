@@ -10,6 +10,13 @@ from pydantic import BaseModel
 
 from .logging_config import setup_logging
 from src.config import PROVIDER_DEFAULTS, get_provider
+from src.dataset_manager import (
+    aggregate_passport,
+    delete_dataset,
+    get_passport,
+    list_datasets,
+    register_dataset,
+)
 from src.model_catalog import fetch_models, list_local_models
 from src.rag_pipeline import answer_question
 
@@ -33,6 +40,13 @@ class AnswerResponse(BaseModel):
     sources: list[dict]
     provider: str
     model: str
+
+
+class DatasetRequest(BaseModel):
+    dataset_id: str
+    name: str
+    description: str = ""
+    source_dir: str
 
 
 def is_configured(name: str, defaults: dict) -> bool:
@@ -104,6 +118,75 @@ def models(provider: str = "local") -> dict:
 
     _MODELS_CACHE[name] = (now, payload)
     return payload
+
+
+@app.get("/datasets")
+def datasets() -> dict:
+    return {"datasets": list_datasets(), "aggregate": aggregate_passport()}
+
+
+@app.get("/datasets/{dataset_id}/passport")
+def dataset_passport(dataset_id: str) -> dict:
+    try:
+        return get_passport(dataset_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/datasets")
+def create_dataset(request: DatasetRequest) -> dict:
+    try:
+        passport = register_dataset(
+            dataset_id=request.dataset_id,
+            name=request.name,
+            description=request.description,
+            source_dir=request.source_dir,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception(
+            "dataset_index_error",
+            extra={
+                "dataset_id": request.dataset_id,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка индексации датасета: {exc}"
+        )
+    logger.info(
+        "dataset_created",
+        extra={
+            "dataset_id": request.dataset_id,
+            "chunks": passport.get("chunks"),
+            "status": "active",
+        },
+    )
+    logger.info(
+        "dataset_indexed",
+        extra={
+            "dataset_id": request.dataset_id,
+            "chunks": passport.get("chunks"),
+        },
+    )
+    return passport
+
+
+@app.delete("/datasets/{dataset_id}")
+def remove_dataset(dataset_id: str, hard: bool = False) -> dict:
+    try:
+        entry = delete_dataset(dataset_id, hard=hard)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    logger.info(
+        "dataset_deleted",
+        extra={
+            "dataset_id": dataset_id,
+            "status": "deleted" if hard else "archived",
+        },
+    )
+    return {"dataset": entry, "hard": hard}
 
 
 @app.post("/chat", response_model=AnswerResponse)

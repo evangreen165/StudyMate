@@ -20,6 +20,9 @@ EXTRA_FIELDS = (
     "sources_count",
     "answer_len",
     "error_type",
+    "dataset_id",
+    "chunks",
+    "status",
 )
 
 

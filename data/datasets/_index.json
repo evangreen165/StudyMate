@@ -1,0 +1,12 @@
+{
+  "datasets": [
+    {
+      "id": "course_materials",
+      "name": "Учебные материалы курса",
+      "description": "Базовый корпус из трёх PDF: основы алгоритмизации, компьютерные сети, ООП.",
+      "created_at": "2026-10-20T12:00:00+03:00",
+      "passport_path": "data/datasets/course_materials/passport.json",
+      "status": "active"
+    }
+  ]
+}
