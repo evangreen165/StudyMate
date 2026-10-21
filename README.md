@@ -214,3 +214,28 @@ streamlit run client/app.py --server.port 8501
 
 После увеличения `max_tokens` (local=1024, облачные=2048) local-показатели на тестовой выборке: Faithfulness 0.461, Answer Relevance 4.39, Context Recall 0.521. Целевые пороги сохранены (Faithfulness ≥ 0.40). Детали: `results/test_summary_v2.md`, `data/requirements.md`.
 
+## Устранение неполадок
+
+**«Не вижу новые элементы UI (провайдер, ключ, фильтр free, тему, max_tokens, статистику, чаты).»**
+
+Вероятная причина — устаревший Docker-образ: `docker compose up -d` без `--build` использует старый образ. Обновите и обновите страницу с Ctrl+F5:
+
+```bash
+docker compose down
+docker compose up --build -d
+```
+
+Затем проверьте, что в контейнере действительно новый код:
+
+```bash
+docker compose exec rag-assistant grep -n "Провайдер\|free_only\|Тёмная тема\|max_tokens\|Чаты" /app/client/app.py
+```
+
+При локальном запуске: `streamlit run client/app.py` должен указывать на тот же корень проекта `D:\K\system(StudyMate)`.
+
+**Другие частые проблемы**
+
+- История чатов хранится в `st.session_state` и очищается при перезапуске Streamlit — это ожидаемое поведение.
+- Локальная 1.5B-модель на CPU может не успеть закончить ответ за `max_tokens` (в логах появляется `response_truncated`) — увеличьте `max_tokens` в настройках (до 4096).
+- API-ключ из UI передаётся только в текущий запрос и не сохраняется между перезапусками.
+
