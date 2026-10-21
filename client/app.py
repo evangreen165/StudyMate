@@ -203,6 +203,27 @@ for chat in st.session_state.chats:
         st.session_state.current_chat_id = chat["id"]
         st.rerun()
 
+active = current_chat()
+btn1, btn2 = st.sidebar.columns(2)
+with btn1:
+    if st.sidebar.button("🧹 Очистить историю", use_container_width=True):
+        active["messages"] = []
+        st.rerun()
+with btn2:
+    if st.sidebar.button("🗑 Удалить чат", use_container_width=True):
+        st.session_state.chats = [
+            c for c in st.session_state.chats if c["id"] != active["id"]
+        ]
+        if not st.session_state.chats:
+            st.session_state.chats = [
+                {"id": str(uuid.uuid4()), "title": "Новый чат", "messages": []}
+            ]
+        if st.session_state.current_chat_id not in [
+            c["id"] for c in st.session_state.chats
+        ]:
+            st.session_state.current_chat_id = st.session_state.chats[0]["id"]
+        st.rerun()
+
 st.sidebar.divider()
 
 with st.sidebar.expander("⚙️ Настройки", expanded=False):
