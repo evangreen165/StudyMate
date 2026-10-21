@@ -10,12 +10,16 @@ from pydantic import BaseModel
 
 from .logging_config import setup_logging
 from src.config import PROVIDER_DEFAULTS, get_provider
+from src.model_catalog import fetch_models, list_local_models
 from src.rag_pipeline import answer_question
 
 setup_logging()
 logger = logging.getLogger("studymate.api")
 
 app = FastAPI(title="StudyMate RAG API")
+
+_MODELS_CACHE: dict[str, tuple[float, dict]] = {}
+_MODELS_CACHE_TTL = 300
 
 
 class QuestionRequest(BaseModel):
@@ -56,6 +60,50 @@ def providers() -> dict:
             }
         )
     return {"providers": items}
+
+
+@app.get("/models")
+def models(provider: str = "local") -> dict:
+    name = provider.lower()
+    if name not in PROVIDER_DEFAULTS:
+        available = ", ".join(PROVIDER_DEFAULTS)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неизвестный провайдер: {name}. Доступны: {available}",
+        )
+
+    now = time.time()
+    cached = _MODELS_CACHE.get(name)
+    if cached and now - cached[0] < _MODELS_CACHE_TTL:
+        return cached[1]
+
+    if name == "local":
+        payload = {"provider": "local", "models": list_local_models()}
+    else:
+        defaults = PROVIDER_DEFAULTS[name]
+        env_key = defaults.get("env_key")
+        api_key = os.getenv(env_key) if env_key else None
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Провайдер {name} не настроен: отсутствует {env_key}",
+            )
+        try:
+            items = fetch_models(name, api_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            logger.exception(
+                "models_error",
+                extra={"provider": name, "error_type": type(exc).__name__},
+            )
+            raise HTTPException(
+                status_code=502, detail=f"Ошибка каталога моделей: {exc}"
+            )
+        payload = {"provider": name, "models": items}
+
+    _MODELS_CACHE[name] = (now, payload)
+    return payload
 
 
 @app.post("/chat", response_model=AnswerResponse)
