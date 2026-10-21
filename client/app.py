@@ -486,14 +486,21 @@ if prompt:
                                 )
                     # Пункт 5: статистика времени и токенов под ответом.
                     usage = data.get("usage") or {}
+                    prompt_tokens = usage.get("prompt_tokens")
+                    completion_tokens = usage.get("completion_tokens")
                     total_tokens = usage.get("total_tokens")
-                    if total_tokens:
-                        meta = (
-                            f"⏱ Время: {elapsed:.1f} сек | "
-                            f"🔤 Токенов: {total_tokens}"
-                        )
-                    else:
-                        meta = f"⏱ Время: {elapsed:.1f} сек"
+                    parts = [f"⏱ Время: {elapsed:.1f} сек"]
+                    if (
+                        prompt_tokens is not None
+                        or completion_tokens is not None
+                        or total_tokens is not None
+                    ):
+                        p = prompt_tokens if prompt_tokens is not None else "?"
+                        c = completion_tokens if completion_tokens is not None else "?"
+                        t = total_tokens if total_tokens is not None else "?"
+                        parts.append(f"🔤 prompt {p} / completion {c} / total {t}")
+                    parts.append(f"📎 Источников: {len(sources)}")
+                    meta = " | ".join(parts)
                     st.caption(meta)
                     st.caption(f"_{data['provider']} / {data['model']}_")
                     chat["messages"].append(
