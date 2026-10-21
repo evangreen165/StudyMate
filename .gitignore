@@ -13,3 +13,4 @@ server/logs/
 data/datasets/*/chunks.jsonl
 data/datasets/*/source/
 data/course_materials_test/
+data/_seed/
