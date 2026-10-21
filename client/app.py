@@ -30,10 +30,10 @@ def load_models(provider: str) -> list[dict]:
 
 
 @st.cache_data(ttl=60)
-def load_datasets() -> list[dict]:
+def load_datasets() -> dict:
     response = requests.get(f"{API_URL}/datasets", timeout=20)
     response.raise_for_status()
-    return response.json().get("datasets", [])
+    return response.json()
 
 
 try:
@@ -133,12 +133,13 @@ elif provider == "local":
 elif not by_name[provider]["configured"]:
     st.sidebar.warning("Провайдер не настроен: добавьте ключ в .env")
 
-datasets: list[dict] = []
+datasets_payload: dict = {"datasets": [], "aggregate": {"totals": {}}}
 try:
-    datasets = load_datasets()
+    datasets_payload = load_datasets()
 except Exception as exc:
     st.sidebar.warning(f"Не удалось загрузить датасеты: {exc}")
 
+datasets = datasets_payload.get("datasets", [])
 active_datasets = [item for item in datasets if item.get("status") == "active"]
 dataset_by_id = {item["id"]: item for item in active_datasets}
 dataset_options = ["__all__"] + list(dataset_by_id)
@@ -157,6 +158,119 @@ selected_dataset = st.sidebar.selectbox(
     "Датасет", dataset_options, format_func=format_dataset
 )
 dataset_id = None if selected_dataset == "__all__" else selected_dataset
+
+with st.expander("Материалы курса", expanded=False):
+    totals = (datasets_payload.get("aggregate") or {}).get("totals", {})
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Документов", totals.get("documents", 0))
+    col2.metric("Страниц", totals.get("pages", 0))
+    col3.metric("Чанков", totals.get("chunks", 0))
+
+    if datasets:
+        st.dataframe(
+            [
+                {
+                    "ID": item.get("id"),
+                    "Название": item.get("name"),
+                    "Документы": item.get("documents"),
+                    "Страницы": item.get("pages"),
+                    "Чанки": item.get("chunks"),
+                    "Статус": item.get("status"),
+                    "Создан": item.get("created_at"),
+                }
+                for item in datasets
+            ],
+            width="stretch",
+        )
+    else:
+        st.info("Датасеты не зарегистрированы")
+
+    active_ids = [
+        item["id"] for item in datasets if item.get("status") == "active"
+    ]
+    if active_ids:
+        passport_id = st.selectbox(
+            "Паспорт датасета", active_ids, key="passport_dataset"
+        )
+        if st.button("Показать паспорт", key="show_passport"):
+            try:
+                response = requests.get(
+                    f"{API_URL}/datasets/{passport_id}/passport", timeout=20
+                )
+                if response.status_code == 200:
+                    passport = response.json()
+                    st.json(passport)
+                    if passport.get("files"):
+                        st.dataframe(
+                            passport["files"], width="stretch"
+                        )
+                else:
+                    detail = response.json().get("detail", response.text)
+                    st.error(detail)
+            except Exception as exc:
+                st.error(f"Ошибка получения паспорта: {exc}")
+
+    st.markdown("### Добавить датасет")
+    with st.form("dataset_form"):
+        new_id = st.text_input("ID датасета", placeholder="new_course")
+        new_name = st.text_input("Название", placeholder="Новый корпус")
+        new_description = st.text_area("Описание", placeholder="Краткое описание")
+        new_source = st.text_input(
+            "Путь на сервере",
+            placeholder="/app/data/course_materials_new",
+        )
+        submitted = st.form_submit_button("Зарегистрировать")
+    if submitted:
+        payload = {
+            "dataset_id": new_id.strip(),
+            "name": new_name.strip(),
+            "description": new_description.strip(),
+            "source_dir": new_source.strip(),
+        }
+        try:
+            response = requests.post(
+                f"{API_URL}/datasets", json=payload, timeout=600
+            )
+            if response.status_code == 200:
+                st.success(f"Датасет {payload['dataset_id']} зарегистрирован")
+                load_datasets.clear()
+                st.rerun()
+            else:
+                try:
+                    detail = response.json().get("detail", response.text)
+                except Exception:
+                    detail = response.text
+                st.error(detail)
+        except Exception as exc:
+            st.error(f"Ошибка регистрации: {exc}")
+
+    if active_ids:
+        st.markdown("### Удалить датасет")
+        delete_id = st.selectbox(
+            "Датасет для удаления",
+            active_ids,
+            index=len(active_ids) - 1,
+            key=f"delete_dataset_{len(active_ids)}",
+        )
+        confirmed = st.checkbox(
+            "Подтверждаю удаление (soft)", key="confirm_delete"
+        )
+        if st.button(
+            "Удалить", key="delete_button", disabled=not confirmed
+        ):
+            try:
+                response = requests.delete(
+                    f"{API_URL}/datasets/{delete_id}?hard=false", timeout=60
+                )
+                if response.status_code == 200:
+                    st.success(f"Датасет {delete_id} архивирован")
+                    load_datasets.clear()
+                    st.rerun()
+                else:
+                    detail = response.json().get("detail", response.text)
+                    st.error(detail)
+            except Exception as exc:
+                st.error(f"Ошибка удаления: {exc}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
