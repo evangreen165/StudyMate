@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import time
+import uuid
 from pathlib import Path
 
 import requests
@@ -90,10 +92,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── CSS: скрываем штатную шапку Streamlit, добавляем отступ сверху (пункт 7) ──
 st.markdown(
     """
 <style>
-.block-container {padding-top: 1.5rem; padding-bottom: 1rem; max-width: 1100px;}
+header {visibility: hidden;}
+.block-container {padding-top: 3rem; padding-bottom: 1rem; max-width: 1100px;}
 .status-pill {
     display: inline-block; padding: 4px 12px; margin-right: 8px;
     border-radius: 999px; background: #f0f2f6; font-size: 12px; color: #555;
@@ -129,8 +133,18 @@ def load_datasets() -> dict:
     return response.json()
 
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# ── Сессионное состояние: токены, чаты, настройки (пункты 4 и 6) ──────────
+# Пункт 4: max_tokens хранится в session_state, виджет slider использует key="max_tokens",
+# поэтому значение переживает ререндеры Streamlit и не сбрасывается при взаимодействии.
+if "max_tokens" not in st.session_state:
+    st.session_state.max_tokens = 2048
+
+if "api_key" not in st.session_state:
+    st.session_state.api_key = ""
+if "free_only" not in st.session_state:
+    st.session_state.free_only = False
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
 if "last_provider" not in st.session_state:
     st.session_state.last_provider = None
 if "provider" not in st.session_state:
@@ -139,8 +153,23 @@ if "model" not in st.session_state:
     st.session_state.model = None
 if "dataset_id" not in st.session_state:
     st.session_state.dataset_id = "__all__"
-if "max_tokens" not in st.session_state:
-    st.session_state.max_tokens = 1024
+
+# Пункт 6: история диалогов — список чатов в session_state.
+if "chats" not in st.session_state:
+    st.session_state.chats = [
+        {"id": str(uuid.uuid4()), "title": "Новый чат", "messages": []}
+    ]
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = st.session_state.chats[0]["id"]
+
+
+def current_chat() -> dict:
+    return next(
+        (chat for chat in st.session_state.chats
+         if chat["id"] == st.session_state.current_chat_id),
+        st.session_state.chats[0],
+    )
+
 
 try:
     providers = load_providers()
@@ -148,41 +177,70 @@ except Exception as exc:
     st.error(f"Не удалось подключиться к API {API_URL}: {exc}")
     st.stop()
 
-configured_names = [
-    item["name"] for item in providers if item.get("configured")
-]
-if not configured_names:
-    st.error("Нет сконфигурированных провайдеров")
-    st.stop()
-if st.session_state.provider not in configured_names:
-    st.session_state.provider = configured_names[0]
+provider_names = [item["name"] for item in providers]
+provider_by_name = {item["name"]: item for item in providers}
+if st.session_state.provider not in provider_names:
+    st.session_state.provider = provider_names[0]
 
 st.sidebar.title("📚 StudyMate")
 st.sidebar.caption("Ассистент по учебным материалам")
 
 if st.sidebar.button("➕ Новый чат", use_container_width=True, type="primary"):
-    st.session_state.messages = []
+    new_id = str(uuid.uuid4())
+    st.session_state.chats.insert(
+        0, {"id": new_id, "title": "Новый чат", "messages": []}
+    )
+    st.session_state.current_chat_id = new_id
     st.rerun()
+
+# ── Список старых чатов (пункт 6) ──────────────────────────────────────────
+st.sidebar.markdown("#### Чаты")
+for chat in st.session_state.chats:
+    title = chat["title"]
+    if st.sidebar.button(
+        title, key=f"chat_{chat['id']}", use_container_width=True
+    ):
+        st.session_state.current_chat_id = chat["id"]
+        st.rerun()
 
 st.sidebar.divider()
 
 with st.sidebar.expander("⚙️ Настройки", expanded=False):
-    provider = st.radio(
+    # Пункт 1: выбор провайдера (selectbox) и безопасный ввод API-ключа.
+    provider = st.selectbox(
         "Провайдер",
-        configured_names,
+        provider_names,
         key="provider",
-        horizontal=True,
     )
     if st.session_state.last_provider != provider:
         st.session_state.last_provider = provider
         st.session_state.model = None
+        # При смене провайдера сбрасываем max_tokens к дефолту;
+        # во всех остальных случаях значение из slider сохраняется.
         st.session_state.max_tokens = 1024 if provider == "local" else 2048
+
+    if provider != "local":
+        st.text_input(
+            "API-ключ (для облачных)",
+            type="password",
+            key="api_key",
+            placeholder="sk-…",
+        )
+
+    # Пункт 2: чекбокс фильтра бесплатных моделей.
+    st.checkbox(
+        "Показать только бесплатные модели",
+        key="free_only",
+        disabled=provider == "local",
+    )
 
     models: list[dict] = []
     try:
         models = load_models(provider)
     except Exception:
         models = []
+    if provider != "local" and st.session_state.free_only:
+        models = [item for item in models if item.get("is_free") is True]
 
     if provider == "local":
         by_path = {item["path"]: item for item in models}
@@ -222,7 +280,12 @@ with st.sidebar.expander("⚙️ Настройки", expanded=False):
             )
             st.session_state.model = selected
         else:
-            st.caption("Каталог моделей пуст")
+            # Каталог недоступен (например, нет ключа) — ручной ввод модели.
+            selected = st.text_input(
+                "Модель (введите вручную)",
+                value=provider_by_name[provider]["default_model"],
+            )
+            st.session_state.model = selected
 
     datasets_payload: dict = {"datasets": [], "aggregate": {"totals": {}}}
     try:
@@ -252,6 +315,7 @@ with st.sidebar.expander("⚙️ Настройки", expanded=False):
         format_func=format_dataset,
     )
 
+    # Пункт 4: значение max_tokens сохраняется через key="max_tokens".
     st.slider(
         "max_tokens",
         256,
@@ -259,6 +323,9 @@ with st.sidebar.expander("⚙️ Настройки", expanded=False):
         step=256,
         key="max_tokens",
     )
+
+    # Пункт 3: переключатель темы.
+    st.toggle("Тёмная тема", key="dark_mode")
 
 with st.sidebar.expander("📁 Материалы курса", expanded=True):
     totals = (datasets_payload.get("aggregate") or {}).get("totals", {})
@@ -271,9 +338,7 @@ with st.sidebar.expander("📁 Материалы курса", expanded=True):
         cols[0].caption(item.get("name") or item["id"])
         cols[1].caption(item.get("status"))
         if item.get("status") == "uploaded":
-            if st.button(
-                "Индексировать", key=f"side_idx_{item['id']}"
-            ):
+            if st.button("Индексировать", key=f"side_idx_{item['id']}"):
                 with st.status("Индексация... (не закрывайте вкладку)"):
                     st.write("Чанкинг → эмбеддинги → Chroma")
                     try:
@@ -305,6 +370,20 @@ with col2:
     if st.button("⚠️ Ограничения", use_container_width=True):
         st.session_state.show_limits_dialog = True
 
+# Пункт 3: CSS для тёмной темы (перекрывает системную светлую).
+if st.session_state.dark_mode:
+    st.markdown(
+        """
+<style>
+html, body, [data-testid="stAppViewContainer"] {background: #0e1117; color: #fafafa;}
+[data-testid="stHeader"] {background: transparent;}
+.status-pill {background: #262730; color: #ccc;}
+.status-pill b {color: #fff;}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
 provider = st.session_state.provider
 model = st.session_state.model or "…"
 dataset = st.session_state.dataset_id
@@ -319,7 +398,10 @@ st.markdown(
 )
 st.write("")
 
-if not st.session_state.messages:
+chat = current_chat()
+messages = chat["messages"]
+
+if not messages:
     st.markdown("### Чем помочь с учёбой?")
     st.caption(
         "Отвечаю на основе лекций, учебников и методичек вашего курса. "
@@ -342,9 +424,11 @@ if not st.session_state.messages:
                 st.session_state.pending_question = question
                 st.rerun()
 
-for message in st.session_state.messages:
+for message in messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message.get("meta"):
+            st.caption(message["meta"])
         if message.get("sources"):
             with st.expander(f"📎 Источники ({len(message['sources'])})"):
                 for source in message["sources"]:
@@ -362,7 +446,9 @@ if "pending_question" in st.session_state:
 if prompt:
     prompt = prompt.strip()
     if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        if chat["title"] == "Новый чат":
+            chat["title"] = prompt[:40] + ("…" if len(prompt) > 40 else "")
+        chat["messages"].append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
         with st.chat_message("assistant"):
@@ -375,13 +461,16 @@ if prompt:
                     if st.session_state.dataset_id == "__all__"
                     else st.session_state.dataset_id,
                     "max_tokens": st.session_state.max_tokens,
+                    "api_key": st.session_state.api_key or None,
                 }
+                started = time.time()
                 try:
                     response = requests.post(
                         f"{API_URL}/chat", json=payload, timeout=900
                     )
                     response.raise_for_status()
                     data = response.json()
+                    elapsed = time.time() - started
                     st.markdown(data["answer"])
                     sources = data.get("sources", [])
                     if sources:
@@ -395,11 +484,23 @@ if prompt:
                                 st.caption(
                                     f"• {document} · стр. {source.get('page')}"
                                 )
+                    # Пункт 5: статистика времени и токенов под ответом.
+                    usage = data.get("usage") or {}
+                    total_tokens = usage.get("total_tokens")
+                    if total_tokens:
+                        meta = (
+                            f"⏱ Время: {elapsed:.1f} сек | "
+                            f"🔤 Токенов: {total_tokens}"
+                        )
+                    else:
+                        meta = f"⏱ Время: {elapsed:.1f} сек"
+                    st.caption(meta)
                     st.caption(f"_{data['provider']} / {data['model']}_")
-                    st.session_state.messages.append(
+                    chat["messages"].append(
                         {
                             "role": "assistant",
                             "content": data["answer"],
+                            "meta": meta,
                             "sources": sources,
                         }
                     )
@@ -411,9 +512,7 @@ if prompt:
 def manage_materials_dialog() -> None:
     dialog_payload = load_datasets()
     dialog_datasets = dialog_payload.get("datasets", [])
-    dialog_totals = (
-        dialog_payload.get("aggregate") or {}
-    ).get("totals", {})
+    dialog_totals = (dialog_payload.get("aggregate") or {}).get("totals", {})
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Документов", dialog_totals.get("documents", 0))
@@ -500,14 +599,10 @@ def manage_materials_dialog() -> None:
                                 st.rerun()
                             else:
                                 st.error(
-                                    response.json().get(
-                                        "detail", response.text
-                                    )
+                                    response.json().get("detail", response.text)
                                 )
             elif status in ("indexed", "active"):
-                if st.button(
-                    "Паспорт", key=f"dlg_pass_{item['id']}"
-                ):
+                if st.button("Паспорт", key=f"dlg_pass_{item['id']}"):
                     try:
                         response = requests.get(
                             f"{API_URL}/datasets/{item['id']}/passport",
@@ -547,9 +642,7 @@ def manage_materials_dialog() -> None:
                                 st.rerun()
                             else:
                                 st.error(
-                                    response.json().get(
-                                        "detail", response.text
-                                    )
+                                    response.json().get("detail", response.text)
                                 )
 
         passport = st.session_state.get(f"passport_{item['id']}")
@@ -586,9 +679,7 @@ def manage_materials_dialog() -> None:
                     load_datasets.clear()
                     st.rerun()
                 else:
-                    st.error(
-                        response.json().get("detail", response.text)
-                    )
+                    st.error(response.json().get("detail", response.text))
 
 
 @st.dialog("Как это работает", width="large")

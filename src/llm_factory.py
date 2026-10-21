@@ -47,6 +47,7 @@ def get_llm(
     provider: str | None = None,
     model_override: str | None = None,
     max_tokens_override: int | None = None,
+    api_key: str | None = None,
 ) -> BaseChatModel:
     name = resolve_provider(provider)
     if name not in PROVIDER_DEFAULTS:
@@ -80,10 +81,11 @@ def get_llm(
         )
 
     env_key = defaults["env_key"]
-    api_key = os.getenv(env_key) if env_key else None
-    if not api_key:
+    resolved_api_key = api_key or (os.getenv(env_key) if env_key else None)
+    if not resolved_api_key:
         raise ValueError(
-            f"Установите {env_key} в .env или выберите другого провайдера"
+            f"Установите {env_key} в .env, передайте API-ключ из интерфейса "
+            f"или выберите другого провайдера"
         )
 
     model = model_override or os.getenv("LLM_MODEL") or defaults["default_model"]
@@ -97,7 +99,7 @@ def get_llm(
     )
     return ChatOpenAI(
         model=model,
-        api_key=api_key,
+        api_key=resolved_api_key,
         base_url=defaults["base_url"],
         temperature=0,
         max_tokens=max_tokens_override or 2048,

@@ -43,6 +43,7 @@ class QuestionRequest(BaseModel):
     model: str | None = None
     dataset_id: str | None = None
     max_tokens: int | None = None
+    api_key: str | None = None
 
 
 class AnswerResponse(BaseModel):
@@ -51,6 +52,7 @@ class AnswerResponse(BaseModel):
     provider: str
     model: str
     dataset_id: str | None = None
+    usage: dict | None = None
 
 
 class DatasetRequest(BaseModel):
@@ -372,6 +374,7 @@ def chat(request: QuestionRequest) -> AnswerResponse:
             model=request.model,
             dataset_id=request.dataset_id,
             max_tokens=request.max_tokens,
+            api_key=request.api_key,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -405,4 +408,5 @@ def chat(request: QuestionRequest) -> AnswerResponse:
         provider=result["provider"],
         model=result["model"],
         dataset_id=result.get("dataset_id"),
+        usage=result.get("usage"),
     )

@@ -34,9 +34,13 @@ def baseline_pure_llm(
     provider: str | None = None,
     model: str | None = None,
     max_tokens: int | None = None,
+    api_key: str | None = None,
 ) -> dict:
     llm = get_llm(
-        provider, model_override=model, max_tokens_override=max_tokens
+        provider,
+        model_override=model,
+        max_tokens_override=max_tokens,
+        api_key=api_key,
     )
     messages = [
         SystemMessage(content="Ты — полезный ассистент"),

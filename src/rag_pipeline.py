@@ -57,9 +57,13 @@ def answer_question(
     model: str | None = None,
     dataset_id: str | None = None,
     max_tokens: int | None = None,
+    api_key: str | None = None,
 ) -> dict:
     llm = get_llm(
-        provider, model_override=model, max_tokens_override=max_tokens
+        provider,
+        model_override=model,
+        max_tokens_override=max_tokens,
+        api_key=api_key,
     )
 
     if dataset_id:
@@ -93,6 +97,24 @@ def answer_question(
             },
         )
 
+    metadata = response.response_metadata or {}
+    usage = metadata.get("usage") or metadata.get("token_usage") or {}
+    prompt_tokens = usage.get("prompt_tokens") or metadata.get("tokens_evaluated")
+    completion_tokens = usage.get("completion_tokens") or metadata.get("tokens_predicted")
+    if prompt_tokens is not None or completion_tokens is not None:
+        total_tokens = (
+            (prompt_tokens or 0) + (completion_tokens or 0)
+            if prompt_tokens is not None or completion_tokens is not None
+            else None
+        )
+        usage_payload = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+    else:
+        usage_payload = None
+
     return {
         "answer": response.content,
         "sources": [
@@ -106,4 +128,5 @@ def answer_question(
         "provider": resolve_provider(provider),
         "model": resolve_model(provider, model),
         "dataset_id": dataset_id,
+        "usage": usage_payload,
     }
