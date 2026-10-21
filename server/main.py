@@ -5,17 +5,25 @@ import os
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .logging_config import setup_logging
 from src.config import PROVIDER_DEFAULTS, get_provider
 from src.dataset_manager import (
+    _load_index,
+    _save_index,
     aggregate_passport,
     delete_dataset,
     get_passport,
+    index_dataset_from_source,
     list_datasets,
     register_dataset,
+)
+from src.upload_manager import (
+    generate_dataset_id,
+    save_uploaded_files,
+    validate_batch,
 )
 from src.model_catalog import fetch_models, list_local_models
 from src.rag_pipeline import answer_question
@@ -173,6 +181,128 @@ def create_dataset(request: DatasetRequest) -> dict:
         },
     )
     return passport
+
+
+@app.post("/datasets/upload")
+def upload_dataset(
+    dataset_name: str = Form(...),
+    description: str = Form(""),
+    files: list[UploadFile] = File(...),
+) -> dict:
+    name = dataset_name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=400, detail="Название датасета не должно быть пустым"
+        )
+    try:
+        total_size = validate_batch(files)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    dataset_id = generate_dataset_id(name)
+    try:
+        saved = save_uploaded_files(dataset_id, files)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    index = _load_index()
+    entry = {
+        "id": dataset_id,
+        "name": name,
+        "description": description,
+        "status": "uploaded",
+        "uploaded_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "file_hashes": [item["sha256"] for item in saved["files"]],
+        "files": saved["files"],
+    }
+    index.setdefault("datasets", []).append(entry)
+    _save_index(index)
+
+    logger.info(
+        "dataset_uploaded",
+        extra={
+            "dataset_id": dataset_id,
+            "files_count": len(saved["files"]),
+            "total_size": total_size,
+        },
+    )
+    return {
+        "dataset_id": dataset_id,
+        "name": name,
+        "status": "uploaded",
+        "files": saved["files"],
+        "warnings": saved["warnings"],
+    }
+
+
+@app.post("/datasets/{dataset_id}/index")
+def index_dataset(dataset_id: str, force: bool = False) -> dict:
+    index = _load_index()
+    entry = next(
+        (item for item in index.get("datasets", []) if item["id"] == dataset_id),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(
+            status_code=404, detail=f"Датасет не найден: {dataset_id}"
+        )
+    if entry.get("status") == "indexed" and not force:
+        raise HTTPException(
+            status_code=409,
+            detail="датасет уже проиндексирован, используйте force=true",
+        )
+
+    started = time.perf_counter()
+    logger.info(
+        "dataset_indexing_started",
+        extra={"dataset_id": dataset_id, "force": force},
+    )
+    try:
+        passport = index_dataset_from_source(
+            dataset_id,
+            entry.get("name", dataset_id),
+            entry.get("description", ""),
+            force=force,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception(
+            "dataset_index_error",
+            extra={"dataset_id": dataset_id, "error_type": type(exc).__name__},
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка индексации: {exc}"
+        )
+    duration = round(time.perf_counter() - started, 2)
+    logger.info(
+        "dataset_indexing_finished",
+        extra={
+            "dataset_id": dataset_id,
+            "duration_s": duration,
+            "chunks": passport.get("chunks"),
+        },
+    )
+    return passport
+
+
+@app.get("/datasets/{dataset_id}/status")
+def dataset_status(dataset_id: str) -> dict:
+    index = _load_index()
+    entry = next(
+        (item for item in index.get("datasets", []) if item["id"] == dataset_id),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(
+            status_code=404, detail=f"Датасет не найден: {dataset_id}"
+        )
+    return {
+        "id": entry["id"],
+        "status": entry.get("status"),
+        "chunks": entry.get("chunks"),
+        "indexed_at": entry.get("indexed_at"),
+    }
 
 
 @app.delete("/datasets/{dataset_id}")

@@ -23,6 +23,10 @@ EXTRA_FIELDS = (
     "dataset_id",
     "chunks",
     "status",
+    "files_count",
+    "total_size",
+    "duration_s",
+    "force",
 )
 
 

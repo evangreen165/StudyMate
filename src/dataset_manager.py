@@ -109,7 +109,7 @@ def ensure_legacy_dataset() -> dict:
             "description": passport.get("description", ""),
             "created_at": passport.get("created_at", _now()),
             "passport_path": _relative_passport("course_materials"),
-            "status": "active",
+            "status": "indexed",
         }
         index.setdefault("datasets", []).append(entry)
         _save_index(index)
@@ -278,7 +278,7 @@ def register_dataset(
         "description": description,
         "created_at": passport.get("created_at", _now()),
         "passport_path": _relative_passport(dataset_id),
-        "status": "active",
+        "status": "indexed",
     }
     if existing is None:
         index.setdefault("datasets", []).append(entry)
@@ -321,7 +321,10 @@ def list_datasets() -> list[dict]:
 
 
 def aggregate_passport() -> dict:
-    datasets = [item for item in list_datasets() if item.get("status") == "active"]
+    datasets = [
+        item for item in list_datasets()
+        if item.get("status") in ("indexed", "active")
+    ]
     totals = {
         "datasets": len(datasets),
         "documents": sum(item.get("documents") or 0 for item in datasets),
@@ -330,6 +333,74 @@ def aggregate_passport() -> dict:
         "chunks": sum(item.get("chunks") or 0 for item in datasets),
     }
     return {"totals": totals, "datasets": datasets}
+
+
+def index_dataset_from_source(
+    dataset_id: str, name: str, description: str, force: bool = False
+) -> dict:
+    dataset_dir = _dataset_dir(dataset_id)
+    source_dir = dataset_dir / "source"
+    if not source_dir.exists():
+        raise ValueError(f"Нет загруженных файлов для датасета {dataset_id}")
+    pdfs = sorted(source_dir.glob("*.pdf"))
+    if not pdfs:
+        raise ValueError(f"В {source_dir} нет PDF-файлов")
+
+    if force:
+        try:
+            _collection().delete(where={"dataset_id": {"$eq": dataset_id}})
+        except Exception:
+            pass
+
+    documents = []
+    for pdf in pdfs:
+        for page_index, document in enumerate(PyPDFLoader(str(pdf)).load()):
+            document.metadata["source"] = pdf.name
+            document.metadata["page"] = page_index + 1
+            document.metadata["dataset_id"] = dataset_id
+            document.metadata["dataset_name"] = name
+            documents.append(document)
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=SEPARATORS,
+    )
+    chunks = [
+        chunk
+        for chunk in splitter.split_documents(documents)
+        if chunk.page_content.strip()
+    ]
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDER_NAME)
+    vectorstore = Chroma(
+        persist_directory=str(CHROMA_DIR),
+        embedding_function=embeddings,
+        collection_name=COLLECTION_NAME,
+    )
+    vectorstore.add_documents(chunks)
+    passport = _build_passport(dataset_id, name, description, documents, chunks)
+
+    passport_path = _passport_path(dataset_id)
+    passport_path.parent.mkdir(parents=True, exist_ok=True)
+    passport_path.write_text(
+        json.dumps(passport, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    index = _load_index()
+    entries = index.get("datasets", [])
+    for item in entries:
+        if item["id"] == dataset_id:
+            item["status"] = "indexed"
+            item["indexed_at"] = passport.get("created_at")
+            item["name"] = name
+            item["description"] = description
+            item["passport_path"] = _relative_passport(dataset_id)
+            item["documents"] = passport.get("documents")
+            item["pages"] = passport.get("pages")
+            item["chunks"] = passport.get("chunks")
+    _save_index(index)
+    return passport
 
 
 def delete_dataset(dataset_id: str, hard: bool = False) -> dict:
@@ -365,7 +436,7 @@ def get_active_dataset_ids() -> list[str]:
     return [
         item["id"]
         for item in list_datasets()
-        if item.get("status") == "active"
+        if item.get("status") in ("indexed", "active")
     ]
 
 

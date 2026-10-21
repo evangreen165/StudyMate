@@ -53,7 +53,7 @@ def answer_question(
 
     if dataset_id:
         status = dataset_status(dataset_id)
-        if status != "active":
+        if status not in ("indexed", "active"):
             raise ValueError(
                 f"Датасет {dataset_id} не найден или архивирован"
             )
