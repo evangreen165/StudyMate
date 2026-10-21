@@ -439,10 +439,30 @@ if st.session_state.dark_mode:
     st.markdown(
         """
 <style>
-html, body, [data-testid="stAppViewContainer"] {background: #0e1117; color: #fafafa;}
-[data-testid="stHeader"] {background: transparent;}
+[data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] .main {
+    background: #0e1117; color: #fafafa;
+}
+[data-testid="stHeader"] {background: rgba(14,17,23,0.9);}
+[data-testid="stSidebar"] {background: #11151c; color: #e6e6e6;}
+[data-testid="stSidebar"] * {color: #e6e6e6;}
+[data-testid="stChatMessage"] {
+    background: #1b2128; border: 1px solid #2a2f38; border-radius: 10px; padding: 8px 12px;
+}
+[data-testid="stChatMessage"] * {color: #fafafa;}
+[data-testid="stExpander"] details {background: #1b2128; border: 1px solid #2a2f38;}
+[data-testid="stExpander"] summary {color: #fafafa;}
+.stTextInput input, .stTextArea textarea, .stNumberInput input {
+    background: #1b2128; color: #fafafa; border: 1px solid #2a2f38;
+}
+.stSelectbox [data-baseweb="select"] > div {
+    background: #1b2128; color: #fafafa;
+}
+.stButton > button, [data-testid="stBaseButton-primary"] {
+    background: #262730; color: #fafafa; border: 1px solid #2a2f38;
+}
 .status-pill {background: #262730; color: #ccc;}
 .status-pill b {color: #fff;}
+[data-testid="stSidebar"] .block-container {padding-top: 1rem;}
 </style>
 """,
         unsafe_allow_html=True,
