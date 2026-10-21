@@ -139,6 +139,8 @@ python src/evaluate_baselines.py
 
 5. Логи: `docker compose logs -f`.
 
+Образ собран на основе runtime-зависимостей (`requirements.txt`); dev-зависимости (`requirements-dev.txt`) в образ не входят.
+
 ### Локальный запуск (без Docker)
 
 ```bash
@@ -154,3 +156,8 @@ streamlit run client/app.py --server.port 8501
 - `server/logs/` — volume, логи сохраняются на хосте.
 - `.env` — `env_file`, никогда не попадает в образ.
 - Entrypoint запускает uvicorn (8000) и streamlit (8501) параллельно.
+- Размер образа: 4.20 ГБ; запуск до healthy — 21.64 с.
+
+## Производительность
+
+Подробные замеры — в `results/performance.md`. Кратко: p50 `/chat` через OpenRouter — 2.741 с, RPS при concurrency=3 — 0.658, RAM контейнера — 1.92 GiB; запуск до healthy — 21.64 с. Образ 4.20 ГБ превышает целевые 2.5 ГБ — ограничение зафиксировано в отчёте.
